@@ -14,28 +14,19 @@
     .header p{color:var(--muted);margin-top:8px}
     .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;margin-bottom:24px}
     .label{display:block;font-size:.85rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
-    .input-row{display:flex;gap:12px}
-    .url-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;color:var(--text);font-size:.95rem;outline:none;transition:border-color .2s}
-    .url-input:focus{border-color:var(--accent)}
-    .url-input::placeholder{color:var(--muted)}
-    .btn{border:none;border-radius:10px;padding:14px 24px;font-size:.95rem;font-weight:600;cursor:pointer;transition:opacity .2s,transform .1s;white-space:nowrap}
+    .btn{border:none;border-radius:10px;padding:14px 24px;font-size:.95rem;font-weight:600;cursor:pointer;transition:opacity .2s,transform .1s}
     .btn:hover{opacity:.9;transform:translateY(-1px)}
     .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
     .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
-    .btn-spotify{background:#1db954;color:#fff;display:flex;align-items:center;gap:8px;width:100%;justify-content:center;font-size:1rem;padding:16px}
+    .btn-spotify{background:#1db954;color:#fff;display:flex;align-items:center;gap:8px;width:100%;justify-content:center;font-size:1rem;padding:16px;border-radius:10px;border:none;cursor:pointer;font-weight:600}
     .btn-secondary{background:var(--surface2);border:1px solid var(--border);color:var(--text)}
-    .login-section{text-align:center}
-    .login-section p{color:var(--muted);margin-bottom:20px;font-size:.95rem}
-    .token-status{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;font-size:.85rem;margin-bottom:16px}
-    .token-ok{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:var(--success)}
-    .token-none{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--error)}
+    .token-ok{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:var(--success);padding:10px 14px;border-radius:8px;font-size:.85rem;margin-bottom:16px}
     .progress-section{display:none;text-align:center}
     .progress-section.active{display:block}
     .progress-title{font-size:1.1rem;font-weight:600;margin-bottom:8px}
     .progress-sub{color:var(--muted);font-size:.9rem;margin-bottom:24px}
     .progress-bg{background:var(--surface2);border-radius:100px;height:6px;overflow:hidden}
-    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:100px;width:0%;transition:width .4s ease;animation:shimmer 1.5s infinite}
-    @keyframes shimmer{0%,100%{opacity:1}50%{opacity:.7}}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:100px;width:0%;transition:width .4s ease}
     .results-section{display:none}
     .results-section.active{display:block}
     .results-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
@@ -59,7 +50,18 @@
     .error-box.active{display:block}
     .energy-bar{width:60px;height:4px;background:var(--surface2);border-radius:100px;overflow:hidden;margin-top:4px}
     .energy-fill{height:100%;background:linear-gradient(90deg,var(--success),#f59e0b);border-radius:100px}
-    .divider{border:none;border-top:1px solid var(--border);margin:20px 0}
+    /* PLAYLIST PICKER */
+    .playlist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:16px}
+    .playlist-item{background:var(--surface2);border:2px solid var(--border);border-radius:12px;padding:14px;cursor:pointer;transition:border-color .2s,transform .1s;display:flex;align-items:center;gap:12px}
+    .playlist-item:hover{border-color:var(--accent);transform:translateY(-2px)}
+    .playlist-item.selected{border-color:var(--accent2);background:rgba(168,85,247,.1)}
+    .playlist-img{width:48px;height:48px;border-radius:6px;object-fit:cover;flex-shrink:0;background:var(--border)}
+    .playlist-name{font-size:.85rem;font-weight:600;line-height:1.3}
+    .playlist-count{font-size:.75rem;color:var(--muted);margin-top:2px}
+    .loading-playlists{color:var(--muted);text-align:center;padding:20px}
+    .selected-playlist{background:rgba(168,85,247,.1);border:1px solid rgba(168,85,247,.3);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between}
+    .selected-name{font-weight:600;font-size:.95rem}
+    .change-btn{color:var(--accent2);font-size:.8rem;cursor:pointer;text-decoration:underline;background:none;border:none}
   </style>
 </head>
 <body>
@@ -69,24 +71,35 @@
     <p>Análisis armónico real · Camelot + BPM + Energía</p>
   </div>
 
-  <!-- LOGIN SECTION -->
+  <!-- LOGIN -->
   <div class="card" id="loginCard">
     <div id="tokenStatus"></div>
-    <div class="login-section" id="loginPrompt">
-      <p>Conecta tu cuenta de Spotify para analizar tus playlists</p>
-      <button class="btn btn-spotify" onclick="loginSpotify()">
+    <div id="loginSection">
+      <p style="color:var(--muted);margin-bottom:20px;text-align:center">Conecta tu cuenta de Spotify para analizar tus playlists</p>
+      <button class="btn-spotify" onclick="loginSpotify()">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
         Conectar con Spotify
       </button>
     </div>
     <div id="connectedSection" style="display:none">
-      <hr class="divider">
-      <label class="label">Link de tu playlist de Spotify</label>
-      <div class="input-row">
-        <input type="text" class="url-input" id="playlistUrl" placeholder="https://open.spotify.com/playlist/..."/>
-        <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()">Analizar</button>
+      <div class="token-ok">✓ Spotify conectado</div>
+
+      <!-- Playlist seleccionada -->
+      <div id="selectedPlaylistBar" style="display:none">
+        <div class="selected-playlist">
+          <span class="selected-name" id="selectedName"></span>
+          <button class="change-btn" onclick="showPicker()">Cambiar playlist</button>
+        </div>
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()" style="width:100%">Analizar playlist</button>
       </div>
-      <p style="color:var(--muted);font-size:.8rem;margin-top:10px;text-align:right">
+
+      <!-- Picker de playlists -->
+      <div id="playlistPicker">
+        <label class="label">Elige tu playlist</label>
+        <div id="playlistGrid" class="loading-playlists">Cargando tus playlists...</div>
+      </div>
+
+      <p style="color:var(--muted);font-size:.8rem;margin-top:16px;text-align:right">
         <span onclick="logout()" style="cursor:pointer;text-decoration:underline">Desconectar Spotify</span>
       </p>
     </div>
@@ -115,47 +128,79 @@
 <script>
 const BACKEND = 'https://dj-engine.onrender.com';
 let lastSet = [];
+let selectedPlaylistId = null;
+let selectedPlaylistName = null;
 
-// Leer token de URL (viene del callback de Spotify)
 function init() {
   const params = new URLSearchParams(window.location.search);
   const accessToken = params.get('access_token');
   const refreshToken = params.get('refresh_token');
-
   if (accessToken) {
     localStorage.setItem('spotify_access_token', accessToken);
     if (refreshToken) localStorage.setItem('spotify_refresh_token', refreshToken);
     window.history.replaceState({}, '', window.location.pathname);
   }
-
-  updateTokenStatus();
-}
-
-function updateTokenStatus() {
   const token = localStorage.getItem('spotify_access_token');
-  const statusEl = document.getElementById('tokenStatus');
-  const loginPrompt = document.getElementById('loginPrompt');
-  const connectedSection = document.getElementById('connectedSection');
-
   if (token) {
-    statusEl.innerHTML = `<div class="token-status token-ok">✓ Spotify conectado</div>`;
-    loginPrompt.style.display = 'none';
-    connectedSection.style.display = 'block';
-  } else {
-    statusEl.innerHTML = '';
-    loginPrompt.style.display = 'block';
-    connectedSection.style.display = 'none';
+    document.getElementById('loginSection').style.display = 'none';
+    document.getElementById('connectedSection').style.display = 'block';
+    loadPlaylists(token);
   }
 }
 
-function loginSpotify() {
-  window.location.href = `${BACKEND}/login`;
-}
+function loginSpotify() { window.location.href = `${BACKEND}/login`; }
 
 function logout() {
   localStorage.removeItem('spotify_access_token');
   localStorage.removeItem('spotify_refresh_token');
-  updateTokenStatus();
+  document.getElementById('loginSection').style.display = 'block';
+  document.getElementById('connectedSection').style.display = 'none';
+  document.getElementById('resultsSection').classList.remove('active');
+}
+
+async function loadPlaylists(token) {
+  const grid = document.getElementById('playlistGrid');
+  grid.innerHTML = '<div class="loading-playlists">Cargando tus playlists...</div>';
+  try {
+    const res = await fetch(`${BACKEND}/my-playlists`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await res.json();
+    if (!data.playlists?.length) {
+      grid.innerHTML = '<div class="loading-playlists">No se encontraron playlists.</div>';
+      return;
+    }
+    grid.innerHTML = '';
+    grid.className = 'playlist-grid';
+    for (const pl of data.playlists) {
+      const item = document.createElement('div');
+      item.className = 'playlist-item';
+      item.onclick = () => selectPlaylist(pl.id, pl.name);
+      item.innerHTML = `
+        ${pl.image ? `<img class="playlist-img" src="${pl.image}" alt="">` : '<div class="playlist-img"></div>'}
+        <div>
+          <div class="playlist-name">${pl.name}</div>
+          <div class="playlist-count">${pl.total} canciones</div>
+        </div>
+      `;
+      grid.appendChild(item);
+    }
+  } catch (err) {
+    grid.innerHTML = `<div class="loading-playlists" style="color:var(--error)">Error: ${err.message}</div>`;
+  }
+}
+
+function selectPlaylist(id, name) {
+  selectedPlaylistId = id;
+  selectedPlaylistName = name;
+  document.getElementById('selectedName').textContent = name;
+  document.getElementById('selectedPlaylistBar').style.display = 'block';
+  document.getElementById('playlistPicker').style.display = 'none';
+}
+
+function showPicker() {
+  document.getElementById('selectedPlaylistBar').style.display = 'none';
+  document.getElementById('playlistPicker').style.display = 'block';
 }
 
 function showError(msg) {
@@ -163,15 +208,11 @@ function showError(msg) {
   box.textContent = msg;
   box.classList.add('active');
 }
-
-function hideError() {
-  document.getElementById('errorBox').classList.remove('active');
-}
+function hideError() { document.getElementById('errorBox').classList.remove('active'); }
 
 async function analyze() {
-  const url = document.getElementById('playlistUrl').value.trim();
   const token = localStorage.getItem('spotify_access_token');
-  if (!url) return showError('Pega el link de tu playlist.');
+  if (!selectedPlaylistId) return showError('Elige una playlist primero.');
   if (!token) return showError('Conecta tu Spotify primero.');
 
   hideError();
@@ -186,45 +227,33 @@ async function analyze() {
   };
 
   prog('Obteniendo tracks...', 'Conectando con Spotify', 10);
-
   let progress = 10;
   const interval = setInterval(() => {
     if (progress < 85) {
-      progress += Math.random() * 6;
-      prog('Analizando audio...', 'Extrayendo BPM, tonalidad y energía', Math.min(progress, 85));
+      progress += Math.random() * 5;
+      prog('Analizando audio...', 'Extrayendo BPM, tonalidad y energía de cada track', Math.min(progress, 85));
     }
-  }, 1500);
+  }, 2000);
 
   try {
     const res = await fetch(`${BACKEND}/analyze`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playlist_url: url, access_token: token }),
+      body: JSON.stringify({ playlist_id: selectedPlaylistId, access_token: token }),
     });
-
     clearInterval(interval);
     const data = await res.json();
-
-    if (res.status === 401 && data.error === 'NO_TOKEN') {
-      loginSpotify();
-      return;
-    }
-
     if (!res.ok) throw new Error(data.error || 'Error en el servidor');
-
     prog('Ordenando set...', '', 95);
     await new Promise(r => setTimeout(r, 500));
     prog('Listo', '', 100);
     await new Promise(r => setTimeout(r, 300));
-
     lastSet = data.set;
     renderResults(data);
-
   } catch (err) {
     clearInterval(interval);
     showError('Error: ' + err.message);
   }
-
   document.getElementById('analyzeBtn').disabled = false;
   document.getElementById('progressSection').classList.remove('active');
 }
@@ -233,7 +262,6 @@ function renderResults(data) {
   const list = document.getElementById('trackList');
   document.getElementById('resultsCount').textContent = `${data.total} tracks · ordenados por compatibilidad armónica`;
   list.innerHTML = '';
-
   data.set.forEach((track, i) => {
     if (i > 0) {
       const conn = document.createElement('div');
@@ -241,7 +269,6 @@ function renderResults(data) {
       conn.innerHTML = '<div class="connector-line"></div>';
       list.appendChild(conn);
     }
-
     const energyPct = track.energy ? Math.round(track.energy * 100) : 0;
     const card = document.createElement('div');
     card.className = 'track-card';
@@ -261,7 +288,6 @@ function renderResults(data) {
     `;
     list.appendChild(card);
   });
-
   document.getElementById('resultsSection').classList.add('active');
   document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
 }
