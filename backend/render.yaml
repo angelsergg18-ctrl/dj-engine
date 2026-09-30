@@ -2,7 +2,7 @@ services:
   - type: web
     name: dj-engine-backend
     env: node
-    buildCommand: npm install && pip install yt-dlp && apt-get install -y ffmpeg
+    buildCommand: npm install && pip install yt-dlp librosa numpy
     startCommand: node server.js
     envVars:
       - key: SPOTIFY_CLIENT_ID
