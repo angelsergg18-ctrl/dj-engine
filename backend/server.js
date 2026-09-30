@@ -1,11 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
-const { execSync, exec } = require('child_process');
+const { execSync } = require('child_process');
 const fs = require('fs');
-const path = require('path');
-const EssentiaWASM = require('essentia.js-model').EssentiaWASM;
-const Essentia = require('essentia.js');
 
 const app = express();
 app.use(cors());
@@ -39,10 +36,10 @@ function camelotCompatible(key1, key2) {
   const num2 = parseInt(k2);
   const mode1 = k1.slice(-1);
   const mode2 = k2.slice(-1);
-  if (k1 === k2) return 3; // misma key = perfecto
-  if (num1 === num2 && mode1 !== mode2) return 2; // relativa = muy bueno
+  if (k1 === k2) return 3;
+  if (num1 === num2 && mode1 !== mode2) return 2;
   const diff = Math.abs(num1 - num2);
-  if ((diff === 1 || diff === 11) && mode1 === mode2) return 2; // vecino = muy bueno
+  if ((diff === 1 || diff === 11) && mode1 === mode2) return 2;
   return 0;
 }
 
@@ -61,15 +58,14 @@ async function getSpotifyToken() {
   return data.access_token;
 }
 
-// ─── OBTENER TRACKS DE PLAYLIST ───────────────────────────────────────────────
+// ─── OBTENER TRACKS ───────────────────────────────────────────────────────────
 async function getPlaylistTracks(playlistId, token) {
   const tracks = [];
   let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
   while (url) {
-    const res = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
     const data = await res.json();
+    if (!data.items) break;
     for (const item of data.items) {
       if (!item.track) continue;
       tracks.push({
@@ -77,7 +73,6 @@ async function getPlaylistTracks(playlistId, token) {
         name: item.track.name,
         artist: item.track.artists.map(a => a.name).join(', '),
         preview_url: item.track.preview_url,
-        duration_ms: item.track.duration_ms,
       });
     }
     url = data.next;
@@ -85,65 +80,94 @@ async function getPlaylistTracks(playlistId, token) {
   return tracks;
 }
 
-// ─── ANALIZAR AUDIO CON ESSENTIA ──────────────────────────────────────────────
-async function analyzeAudioUrl(audioUrl) {
-  // Descargar audio temporalmente
-  const tmpFile = `/tmp/audio_${Date.now()}.mp3`;
-  const tmpWav = `/tmp/audio_${Date.now()}.wav`;
+// ─── ANALIZAR AUDIO CON PYTHON/LIBROSA ───────────────────────────────────────
+async function analyzeAudio(audioUrl, isFile = false) {
+  const tmpMp3 = `/tmp/audio_${Date.now()}.mp3`;
 
   try {
-    // Descargar
-    execSync(`curl -s -L "${audioUrl}" -o "${tmpFile}"`);
-    // Convertir a wav para Essentia
-    execSync(`ffmpeg -y -i "${tmpFile}" -ar 44100 -ac 1 "${tmpWav}" 2>/dev/null`);
+    if (!isFile) {
+      execSync(`curl -s -L --max-time 30 "${audioUrl}" -o "${tmpMp3}"`, { timeout: 35000 });
+    }
 
-    // Leer y analizar con Essentia
-    const audioBuffer = fs.readFileSync(tmpWav);
-    const essentia = new Essentia(EssentiaWASM);
+    const filePath = isFile ? audioUrl : tmpMp3;
 
-    const audioArray = new Float32Array(audioBuffer.buffer);
-    const vectorSignal = essentia.arrayToVector(audioArray);
+    const pythonScript = `
+import sys
+import json
+import warnings
+warnings.filterwarnings('ignore')
 
-    // BPM
-    const rhythm = essentia.RhythmExtractor2013(vectorSignal);
-    const bpm = Math.round(rhythm.bpm);
+try:
+    import librosa
+    import numpy as np
 
-    // Key
-    const keyResult = essentia.KeyExtractor(vectorSignal);
-    const key = `${keyResult.key} ${keyResult.scale}`;
+    y, sr = librosa.load("${filePath}", duration=30, mono=True)
 
-    // Energy
-    const energy = essentia.Energy(vectorSignal).energy;
+    # BPM
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    bpm = round(float(tempo[0]) if hasattr(tempo, '__len__') else float(tempo))
 
-    // Limpiar
-    fs.unlinkSync(tmpFile);
-    fs.unlinkSync(tmpWav);
+    # Key usando chroma
+    chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
+    chroma_mean = np.mean(chroma, axis=1)
+    
+    keys = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    key_idx = int(np.argmax(chroma_mean))
+    key_name = keys[key_idx]
+    
+    # Detectar modo (major/minor) con HPSS
+    harmonic = librosa.effects.harmonic(y)
+    tonnetz = librosa.feature.tonnetz(y=harmonic, sr=sr)
+    mode_val = float(np.mean(tonnetz[1]))
+    mode = 'major' if mode_val > 0 else 'minor'
+    
+    full_key = f"{key_name} {mode}"
 
-    return { bpm, key, energy: parseFloat(energy.toFixed(3)) };
+    # Energy (RMS)
+    rms = librosa.feature.rms(y=y)
+    energy = float(np.mean(rms))
+    energy_norm = min(1.0, energy * 10)
+
+    print(json.dumps({"bpm": bpm, "key": full_key, "energy": round(energy_norm, 3)}))
+
+except Exception as e:
+    print(json.dumps({"error": str(e)}))
+`;
+
+    const result = execSync(`python3 -c '${pythonScript}'`, { timeout: 60000 }).toString().trim();
+
+    if (!isFile) {
+      try { fs.unlinkSync(tmpMp3); } catch {}
+    }
+
+    const parsed = JSON.parse(result);
+    if (parsed.error) return null;
+    return parsed;
+
   } catch (e) {
-    try { fs.unlinkSync(tmpFile); } catch {}
-    try { fs.unlinkSync(tmpWav); } catch {}
+    try { fs.unlinkSync(tmpMp3); } catch {}
     return null;
   }
 }
 
 // ─── FALLBACK: YOUTUBE ────────────────────────────────────────────────────────
 async function analyzeViaYouTube(trackName, artist) {
-  const query = `${artist} ${trackName} official audio`;
-  const tmpFile = `/tmp/yt_${Date.now()}`;
+  const query = `${artist} ${trackName} audio`;
+  const tmpBase = `/tmp/yt_${Date.now()}`;
 
   try {
-    // Descargar solo 30 segundos de audio desde YouTube
     execSync(
-      `yt-dlp --no-playlist -x --audio-format mp3 --postprocessor-args "-t 30" ` +
-      `--output "${tmpFile}.%(ext)s" "ytsearch1:${query}" 2>/dev/null`,
-      { timeout: 60000 }
+      `yt-dlp --no-playlist -x --audio-format mp3 --audio-quality 5 ` +
+      `--postprocessor-args "ffmpeg:-t 30" ` +
+      `--output "${tmpBase}.%(ext)s" ` +
+      `"ytsearch1:${query.replace(/"/g, '')}" 2>/dev/null`,
+      { timeout: 90000 }
     );
 
-    const mp3File = `${tmpFile}.mp3`;
+    const mp3File = `${tmpBase}.mp3`;
     if (!fs.existsSync(mp3File)) return null;
 
-    const result = await analyzeAudioUrl(`file://${mp3File}`);
+    const result = await analyzeAudio(mp3File, true);
     try { fs.unlinkSync(mp3File); } catch {}
     return result;
 
@@ -152,14 +176,18 @@ async function analyzeViaYouTube(trackName, artist) {
   }
 }
 
-// ─── ALGORITMO DE ORDENAMIENTO ────────────────────────────────────────────────
+// ─── ORDENAMIENTO ─────────────────────────────────────────────────────────────
 function orderPlaylist(tracks) {
   if (tracks.length === 0) return tracks;
 
-  const ordered = [];
-  const remaining = [...tracks];
+  const withData = tracks.filter(t => t.bpm && t.key);
+  const withoutData = tracks.filter(t => !t.bpm || !t.key);
 
-  // Empezar con el track de menor energía
+  if (withData.length === 0) return tracks;
+
+  const ordered = [];
+  const remaining = [...withData];
+
   remaining.sort((a, b) => (a.energy || 0) - (b.energy || 0));
   ordered.push(remaining.shift());
 
@@ -169,51 +197,41 @@ function orderPlaylist(tracks) {
     let bestIndex = 0;
 
     for (let i = 0; i < remaining.length; i++) {
-      const candidate = remaining[i];
+      const c = remaining[i];
       let score = 0;
-
-      // Compatibilidad armónica (peso alto)
-      score += camelotCompatible(last.key, candidate.key) * 40;
-
-      // Progresión de BPM suave (diferencia pequeña = mejor)
-      const bpmDiff = Math.abs((last.bpm || 120) - (candidate.bpm || 120));
+      score += camelotCompatible(last.key, c.key) * 40;
+      const bpmDiff = Math.abs((last.bpm || 120) - (c.bpm || 120));
       if (bpmDiff <= 3) score += 30;
       else if (bpmDiff <= 8) score += 20;
       else if (bpmDiff <= 15) score += 10;
-
-      // Progresión de energía (ligero incremento = mejor)
-      const energyDiff = (candidate.energy || 0) - (last.energy || 0);
+      const energyDiff = (c.energy || 0) - (last.energy || 0);
       if (energyDiff >= 0 && energyDiff <= 0.15) score += 20;
       else if (energyDiff < 0 && energyDiff >= -0.1) score += 10;
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestIndex = i;
-      }
+      if (score > bestScore) { bestScore = score; bestIndex = i; }
     }
 
     ordered.push(remaining.splice(bestIndex, 1)[0]);
   }
 
-  return ordered;
+  return [...ordered, ...withoutData];
 }
 
-// ─── GENERAR JUSTIFICACIONES ──────────────────────────────────────────────────
-function generateTransitionNote(track1, track2) {
+function generateTransitionNote(t1, t2) {
   const notes = [];
-  const camelotScore = camelotCompatible(track1.key, track2.key);
-  const bpmDiff = Math.abs((track1.bpm || 0) - (track2.bpm || 0));
+  const cs = camelotCompatible(t1.key, t2.key);
+  const bpmDiff = Math.abs((t1.bpm || 0) - (t2.bpm || 0));
 
-  if (camelotScore === 3) notes.push(`misma tonalidad (${CAMELOT[track1.key]})`);
-  else if (camelotScore === 2) notes.push(`tonalidades compatibles (${CAMELOT[track1.key]} → ${CAMELOT[track2.key]})`);
+  if (cs === 3) notes.push(`misma tonalidad (${CAMELOT[t1.key]})`);
+  else if (cs === 2) notes.push(`tonalidades compatibles (${CAMELOT[t1.key]} → ${CAMELOT[t2.key]})`);
+  else if (cs === 0 && t1.key && t2.key) notes.push(`cambio de tonalidad (${CAMELOT[t1.key]} → ${CAMELOT[t2.key]})`);
 
-  if (bpmDiff <= 3) notes.push(`BPM casi idéntico (${track1.bpm} → ${track2.bpm})`);
-  else if (bpmDiff <= 8) notes.push(`BPM compatible (${track1.bpm} → ${track2.bpm})`);
-  else notes.push(`salto de BPM (${track1.bpm} → ${track2.bpm})`);
+  if (bpmDiff <= 3) notes.push(`BPM idéntico (${t1.bpm} → ${t2.bpm})`);
+  else if (bpmDiff <= 8) notes.push(`BPM compatible (${t1.bpm} → ${t2.bpm})`);
+  else notes.push(`salto BPM (${t1.bpm} → ${t2.bpm})`);
 
-  const energyDiff = ((track2.energy || 0) - (track1.energy || 0)).toFixed(2);
-  if (energyDiff > 0) notes.push(`energía sube +${energyDiff}`);
-  else if (energyDiff < 0) notes.push(`energía baja ${energyDiff}`);
+  const ed = ((t2.energy || 0) - (t1.energy || 0)).toFixed(2);
+  if (parseFloat(ed) > 0.05) notes.push(`energía ↑`);
+  else if (parseFloat(ed) < -0.05) notes.push(`energía ↓`);
 
   return notes.join(' · ');
 }
@@ -222,30 +240,21 @@ function generateTransitionNote(track1, track2) {
 app.post('/analyze', async (req, res) => {
   try {
     const { playlist_url } = req.body;
-
-    // Extraer playlist ID
     const match = playlist_url.match(/playlist\/([a-zA-Z0-9]+)/);
     if (!match) return res.status(400).json({ error: 'URL de playlist inválida' });
-    const playlistId = match[1];
 
-    // Auth Spotify
     const token = await getSpotifyToken();
+    const tracks = await getPlaylistTracks(match[1], token);
+    if (!tracks.length) return res.status(400).json({ error: 'Playlist vacía o privada' });
 
-    // Obtener tracks
-    const tracks = await getPlaylistTracks(playlistId, token);
-    if (tracks.length === 0) return res.status(400).json({ error: 'Playlist vacía o privada' });
-
-    // Analizar cada track
     const analyzed = [];
     for (const track of tracks) {
       let audioData = null;
 
-      // Ruta A: Preview de Spotify
       if (track.preview_url) {
-        audioData = await analyzeAudioUrl(track.preview_url);
+        audioData = await analyzeAudio(track.preview_url);
       }
 
-      // Ruta B: YouTube fallback
       if (!audioData) {
         audioData = await analyzeViaYouTube(track.name, track.artist);
       }
@@ -256,15 +265,13 @@ app.post('/analyze', async (req, res) => {
         key: audioData?.key || null,
         energy: audioData?.energy || null,
         camelot: audioData?.key ? CAMELOT[audioData.key] : null,
-        source: audioData ? (track.preview_url ? 'spotify_preview' : 'youtube') : 'no_data',
+        source: audioData ? (track.preview_url ? 'spotify_preview' : 'youtube') : 'sin_datos',
       });
     }
 
-    // Ordenar playlist
     const ordered = orderPlaylist(analyzed);
 
-    // Generar set final con transiciones
-    const setWithTransitions = ordered.map((track, i) => ({
+    const setFinal = ordered.map((track, i) => ({
       position: i + 1,
       name: track.name,
       artist: track.artist,
@@ -276,7 +283,7 @@ app.post('/analyze', async (req, res) => {
       transition_note: i > 0 ? generateTransitionNote(ordered[i - 1], track) : 'Opening track',
     }));
 
-    res.json({ set: setWithTransitions, total: ordered.length });
+    res.json({ set: setFinal, total: ordered.length });
 
   } catch (err) {
     console.error(err);
