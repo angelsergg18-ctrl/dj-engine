@@ -55,6 +55,8 @@ async function getSpotifyToken() {
     body: 'grant_type=client_credentials',
   });
   const data = await res.json();
+  console.log('Spotify auth response:', JSON.stringify(data));
+  if (!data.access_token) throw new Error('Spotify auth failed: ' + JSON.stringify(data));
   return data.access_token;
 }
 
@@ -65,6 +67,7 @@ async function getPlaylistTracks(playlistId, token) {
   while (url) {
     const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
     const data = await res.json();
+    console.log('Spotify playlist response status:', res.status, JSON.stringify(data).substring(0, 300));
     if (!data.items) break;
     for (const item of data.items) {
       if (!item.track) continue;
