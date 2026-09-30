@@ -11,8 +11,8 @@ app.use(express.json());
 const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
 const REDIRECT_URI = process.env.REDIRECT_URI || 'https://dj-engine.onrender.com/callback';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://beamish-bombolone-61749e.netlify.app';
 
-// ─── CAMELOT WHEEL ────────────────────────────────────────────────────────────
 const CAMELOT = {
   'C major':'8B','A minor':'8A','G major':'9B','E minor':'9A',
   'D major':'10B','B minor':'10A','A major':'11B','F# minor':'11A',
@@ -35,18 +35,15 @@ function camelotCompatible(k1, k2) {
   return 0;
 }
 
-// ─── OAUTH ENDPOINTS ──────────────────────────────────────────────────────────
+// ─── OAUTH ────────────────────────────────────────────────────────────────────
 app.get('/login', (req, res) => {
   const scopes = 'playlist-read-private playlist-read-collaborative';
-  const url = `https://accounts.spotify.com/authorize?` +
-    `client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`;
-  res.redirect(url);
+  res.redirect(`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`);
 });
 
 app.get('/callback', async (req, res) => {
   const code = req.query.code;
   if (!code) return res.status(400).send('No code');
-
   const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: {
@@ -55,54 +52,53 @@ app.get('/callback', async (req, res) => {
     },
     body: `grant_type=authorization_code&code=${code}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`,
   });
-
   const data = await tokenRes.json();
-  console.log('Token exchange:', JSON.stringify(data).substring(0, 200));
-
-  if (!data.access_token) return res.status(500).send('Token error: ' + JSON.stringify(data));
-
-  // Redirigir al frontend con el token
-  const frontendUrl = process.env.FRONTEND_URL || 'https://beamish-bombolone-61749e.netlify.app';
-  res.redirect(`${frontendUrl}?access_token=${data.access_token}&refresh_token=${data.refresh_token}`);
+  if (!data.access_token) return res.status(500).send('Token error');
+  res.redirect(`${FRONTEND_URL}?access_token=${data.access_token}&refresh_token=${data.refresh_token || ''}`);
 });
 
-app.post('/refresh', async (req, res) => {
-  const { refresh_token } = req.body;
-  const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Basic ' + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: `grant_type=refresh_token&refresh_token=${refresh_token}`,
-  });
-  const data = await tokenRes.json();
-  res.json(data);
+// ─── OBTENER PLAYLISTS DEL USUARIO ───────────────────────────────────────────
+app.get('/my-playlists', async (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try {
+    const playlists = [];
+    let url = 'https://api.spotify.com/v1/me/playlists?limit=50';
+    while (url) {
+      const r = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      const d = await r.json();
+      if (!d.items) break;
+      for (const p of d.items) {
+        if (!p) continue;
+        playlists.push({
+          id: p.id,
+          name: p.name,
+          total: p.tracks?.total || 0,
+          image: p.images?.[0]?.url || null,
+        });
+      }
+      url = d.next;
+    }
+    res.json({ playlists });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ─── OBTENER TRACKS ───────────────────────────────────────────────────────────
+// ─── OBTENER TRACKS VIA /me/playlists ────────────────────────────────────────
 async function getPlaylistTracks(playlistId, token) {
   const tracks = [];
-  let url = `https://api.spotify.com/v1/me/tracks?limit=50`;
-  // Intentar primero con el endpoint de la playlist
-  const testRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=1`, { headers: { 'Authorization': `Bearer ${token}` } });
-  console.log('Playlist test status:', testRes.status);
-  if (testRes.status === 200) {
-    url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
-  } else {
-    console.log('Falling back to /me/playlists');
-    // Obtener playlist via /me/playlists
-    const plRes = await fetch(`https://api.spotify.com/v1/users/me/playlists`, { headers: { 'Authorization': `Bearer ${token}` } });
-    console.log('me/playlists status:', plRes.status);
-    url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
-  }
-  while (url) {
+  // Usar endpoint que funciona en Development Mode
+  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+  let attempts = 0;
+  while (url && attempts < 10) {
+    attempts++;
     const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
     const data = await res.json();
-    console.log('Playlist fetch status:', res.status, Object.keys(data));
-    if (!data.items) break;
+    console.log(`Tracks fetch status: ${res.status}, items: ${data.items?.length || 0}`);
+    if (res.status !== 200 || !data.items) break;
     for (const item of data.items) {
-      if (!item.track) continue;
+      if (!item?.track) continue;
       tracks.push({
         id: item.track.id,
         name: item.track.name,
@@ -119,52 +115,39 @@ async function getPlaylistTracks(playlistId, token) {
 async function analyzeAudio(audioUrl, isFile = false) {
   const tmpMp3 = `/tmp/audio_${Date.now()}.mp3`;
   try {
-    if (!isFile) {
-      execSync(`curl -s -L --max-time 30 "${audioUrl}" -o "${tmpMp3}"`, { timeout: 35000 });
-    }
+    if (!isFile) execSync(`curl -s -L --max-time 30 "${audioUrl}" -o "${tmpMp3}"`, { timeout: 35000 });
     const filePath = isFile ? audioUrl : tmpMp3;
-    const pythonScript = `
+    const result = execSync(`python3 -c '
 import sys, json, warnings
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 try:
     import librosa, numpy as np
     y, sr = librosa.load("${filePath}", duration=30, mono=True)
     tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
-    bpm = round(float(tempo[0]) if hasattr(tempo, '__len__') else float(tempo))
+    bpm = round(float(tempo[0]) if hasattr(tempo, "__len__") else float(tempo))
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr)
-    chroma_mean = np.mean(chroma, axis=1)
-    keys = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
-    key_name = keys[int(np.argmax(chroma_mean))]
+    keys = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
+    key_name = keys[int(np.argmax(np.mean(chroma, axis=1)))]
     harmonic = librosa.effects.harmonic(y)
     tonnetz = librosa.feature.tonnetz(y=harmonic, sr=sr)
-    mode = 'major' if float(np.mean(tonnetz[1])) > 0 else 'minor'
+    mode = "major" if float(np.mean(tonnetz[1])) > 0 else "minor"
     rms = librosa.feature.rms(y=y)
     energy = min(1.0, float(np.mean(rms)) * 10)
     print(json.dumps({"bpm": bpm, "key": f"{key_name} {mode}", "energy": round(energy, 3)}))
 except Exception as e:
     print(json.dumps({"error": str(e)}))
-`;
-    const result = execSync(`python3 -c '${pythonScript}'`, { timeout: 60000 }).toString().trim();
+'`, { timeout: 60000 }).toString().trim();
     if (!isFile) { try { fs.unlinkSync(tmpMp3); } catch {} }
     const parsed = JSON.parse(result);
-    if (parsed.error) return null;
-    return parsed;
-  } catch (e) {
-    try { fs.unlinkSync(tmpMp3); } catch {}
-    return null;
-  }
+    return parsed.error ? null : parsed;
+  } catch { try { fs.unlinkSync(tmpMp3); } catch {} return null; }
 }
 
 async function analyzeViaYouTube(trackName, artist) {
-  const query = `${artist} ${trackName} audio`.replace(/"/g, '');
+  const query = `${artist} ${trackName} audio`.replace(/"/g, '').replace(/'/g, '');
   const tmpBase = `/tmp/yt_${Date.now()}`;
   try {
-    execSync(
-      `yt-dlp --no-playlist -x --audio-format mp3 --audio-quality 5 ` +
-      `--postprocessor-args "ffmpeg:-t 30" ` +
-      `--output "${tmpBase}.%(ext)s" "ytsearch1:${query}" 2>/dev/null`,
-      { timeout: 90000 }
-    );
+    execSync(`yt-dlp --no-playlist -x --audio-format mp3 --audio-quality 5 --postprocessor-args "ffmpeg:-t 30" --output "${tmpBase}.%(ext)s" "ytsearch1:${query}" 2>/dev/null`, { timeout: 90000 });
     const mp3File = `${tmpBase}.mp3`;
     if (!fs.existsSync(mp3File)) return null;
     const result = await analyzeAudio(mp3File, true);
@@ -205,11 +188,11 @@ function orderPlaylist(tracks) {
 function transitionNote(t1, t2) {
   const notes = [];
   const cs = camelotCompatible(t1.key, t2.key);
-  const bpmDiff = Math.abs((t1.bpm || 0) - (t2.bpm || 0));
+  const bd = Math.abs((t1.bpm || 0) - (t2.bpm || 0));
   if (cs === 3) notes.push(`misma tonalidad (${CAMELOT[t1.key]})`);
   else if (cs === 2) notes.push(`tonalidades compatibles (${CAMELOT[t1.key]} → ${CAMELOT[t2.key]})`);
-  if (bpmDiff <= 3) notes.push(`BPM idéntico (${t1.bpm})`);
-  else if (bpmDiff <= 8) notes.push(`BPM compatible (${t1.bpm} → ${t2.bpm})`);
+  if (bd <= 3) notes.push(`BPM idéntico (${t1.bpm})`);
+  else if (bd <= 8) notes.push(`BPM compatible (${t1.bpm} → ${t2.bpm})`);
   else notes.push(`salto BPM (${t1.bpm} → ${t2.bpm})`);
   const ed = ((t2.energy || 0) - (t1.energy || 0)).toFixed(2);
   if (parseFloat(ed) > 0.05) notes.push('energía ↑');
@@ -217,17 +200,16 @@ function transitionNote(t1, t2) {
   return notes.join(' · ');
 }
 
-// ─── ENDPOINT PRINCIPAL ───────────────────────────────────────────────────────
+// ─── ANALIZAR PLAYLIST ────────────────────────────────────────────────────────
 app.post('/analyze', async (req, res) => {
   try {
-    const { playlist_url, access_token } = req.body;
-    const match = playlist_url.match(/playlist\/([a-zA-Z0-9]+)/);
-    if (!match) return res.status(400).json({ error: 'URL de playlist inválida' });
+    const { playlist_id, access_token } = req.body;
+    if (!access_token) return res.status(401).json({ error: 'NO_TOKEN' });
+    if (!playlist_id) return res.status(400).json({ error: 'No playlist_id' });
 
-    if (!access_token) return res.status(401).json({ error: 'NO_TOKEN', login_url: `https://dj-engine.onrender.com/login` });
-
-    const tracks = await getPlaylistTracks(match[1], access_token);
-    if (!tracks.length) return res.status(400).json({ error: 'Playlist vacía o privada' });
+    const tracks = await getPlaylistTracks(playlist_id, access_token);
+    console.log(`Got ${tracks.length} tracks for playlist ${playlist_id}`);
+    if (!tracks.length) return res.status(400).json({ error: 'Playlist vacía o sin acceso' });
 
     const analyzed = [];
     for (const track of tracks) {
@@ -265,26 +247,6 @@ app.post('/analyze', async (req, res) => {
 });
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
-
-app.get('/test-playlist', async (req, res) => {
-  const token = req.query.token;
-  const playlistId = req.query.id;
-  if (!token) return res.json({ error: 'No token' });
-  
-  const r1 = await fetch(`https://api.spotify.com/v1/me/playlists?limit=5`, { headers: { 'Authorization': `Bearer ${token}` } });
-  const d1 = await r1.json();
-  
-  const r2 = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=1`, { headers: { 'Authorization': `Bearer ${token}` } });
-  const d2 = await r2.json();
-  
-  res.json({ 
-    me_playlists_status: r1.status,
-    me_playlists_count: d1.items ? d1.items.length : 0,
-    playlist_tracks_status: r2.status,
-    playlist_tracks_error: d2.error || null,
-    playlist_tracks_count: d2.items ? d2.items.length : 0
-  });
-});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`DJ Engine corriendo en puerto ${PORT}`));
