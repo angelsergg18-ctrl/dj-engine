@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: dj-engine-backend
+    env: node
+    buildCommand: npm install && pip install yt-dlp && apt-get install -y ffmpeg
+    startCommand: node server.js
+    envVars:
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
