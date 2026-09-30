@@ -83,11 +83,23 @@ app.post('/refresh', async (req, res) => {
 // ─── OBTENER TRACKS ───────────────────────────────────────────────────────────
 async function getPlaylistTracks(playlistId, token) {
   const tracks = [];
-  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+  let url = `https://api.spotify.com/v1/me/tracks?limit=50`;
+  // Intentar primero con el endpoint de la playlist
+  const testRes = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=1`, { headers: { 'Authorization': `Bearer ${token}` } });
+  console.log('Playlist test status:', testRes.status);
+  if (testRes.status === 200) {
+    url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+  } else {
+    console.log('Falling back to /me/playlists');
+    // Obtener playlist via /me/playlists
+    const plRes = await fetch(`https://api.spotify.com/v1/users/me/playlists`, { headers: { 'Authorization': `Bearer ${token}` } });
+    console.log('me/playlists status:', plRes.status);
+    url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
+  }
   while (url) {
     const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
     const data = await res.json();
-    console.log('Playlist fetch status:', res.status);
+    console.log('Playlist fetch status:', res.status, Object.keys(data));
     if (!data.items) break;
     for (const item of data.items) {
       if (!item.track) continue;
@@ -253,6 +265,26 @@ app.post('/analyze', async (req, res) => {
 });
 
 app.get('/health', (_, res) => res.json({ status: 'ok' }));
+
+app.get('/test-playlist', async (req, res) => {
+  const token = req.query.token;
+  const playlistId = req.query.id;
+  if (!token) return res.json({ error: 'No token' });
+  
+  const r1 = await fetch(`https://api.spotify.com/v1/me/playlists?limit=5`, { headers: { 'Authorization': `Bearer ${token}` } });
+  const d1 = await r1.json();
+  
+  const r2 = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=1`, { headers: { 'Authorization': `Bearer ${token}` } });
+  const d2 = await r2.json();
+  
+  res.json({ 
+    me_playlists_status: r1.status,
+    me_playlists_count: d1.items ? d1.items.length : 0,
+    playlist_tracks_status: r2.status,
+    playlist_tracks_error: d2.error || null,
+    playlist_tracks_count: d2.items ? d2.items.length : 0
+  });
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`DJ Engine corriendo en puerto ${PORT}`));
