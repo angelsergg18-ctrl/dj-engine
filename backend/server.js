@@ -8,10 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
-const CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || 'https://dj-engine.onrender.com/callback';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'https://beamish-bombolone-61749e.netlify.app';
+const GETBPM_KEY = process.env.GETBPM_API_KEY || '';
 
 const CAMELOT = {
   'C major':'8B','A minor':'8A','G major':'9B','E minor':'9A',
@@ -20,6 +17,13 @@ const CAMELOT = {
   'F# major':'2B','D# minor':'2A','C# major':'3B','A# minor':'3A',
   'G# major':'4B','F minor':'4A','D# major':'5B','C minor':'5A',
   'A# major':'6B','G minor':'6A','F major':'7B','D minor':'7A',
+};
+
+const CAMELOT_BY_KEY = {
+  'C':'8B','Cm':'8A','G':'9B','Gm':'9A','D':'10B','Bm':'10A',
+  'A':'11B','F#m':'11A','E':'12B','C#m':'12A','B':'1B','G#m':'1A',
+  'F#':'2B','D#m':'2A','C#':'3B','A#m':'3A','G#':'4B','Fm':'4A',
+  'D#':'5B','Cm2':'5A','A#':'6B','Gm2':'6A','F':'7B','Dm':'7A',
 };
 
 function camelotCompatible(k1, k2) {
@@ -35,83 +39,23 @@ function camelotCompatible(k1, k2) {
   return 0;
 }
 
-// ─── OAUTH ────────────────────────────────────────────────────────────────────
-app.get('/login', (req, res) => {
-  const scopes = 'playlist-read-private playlist-read-collaborative';
-  res.redirect(`https://accounts.spotify.com/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scopes)}`);
-});
-
-app.get('/callback', async (req, res) => {
-  const code = req.query.code;
-  if (!code) return res.status(400).send('No code');
-  const tokenRes = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Basic ' + Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: `grant_type=authorization_code&code=${code}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`,
-  });
-  const data = await tokenRes.json();
-  if (!data.access_token) return res.status(500).send('Token error');
-  res.redirect(`${FRONTEND_URL}?access_token=${data.access_token}&refresh_token=${data.refresh_token || ''}`);
-});
-
-// ─── OBTENER PLAYLISTS DEL USUARIO ───────────────────────────────────────────
-app.get('/my-playlists', async (req, res) => {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'No token' });
+// ─── BUSCAR BPM Y KEY EN GETSONGBPM ──────────────────────────────────────────
+async function lookupSongBPM(title, artist) {
+  if (!GETBPM_KEY) return null;
   try {
-    const playlists = [];
-    let url = 'https://api.spotify.com/v1/me/playlists?limit=50';
-    while (url) {
-      const r = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-      const d = await r.json();
-      if (!d.items) break;
-      for (const p of d.items) {
-        if (!p) continue;
-        playlists.push({
-          id: p.id,
-          name: p.name,
-          total: p.tracks?.total || 0,
-          image: p.images?.[0]?.url || null,
-        });
-      }
-      url = d.next;
-    }
-    res.json({ playlists });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── OBTENER TRACKS VIA /me/playlists ────────────────────────────────────────
-async function getPlaylistTracks(playlistId, token) {
-  const tracks = [];
-  // Usar endpoint que funciona en Development Mode
-  let url = `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=100`;
-  let attempts = 0;
-  while (url && attempts < 10) {
-    attempts++;
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+    const query = encodeURIComponent(`${artist} ${title}`);
+    const res = await fetch(`https://api.getsongbpm.com/search/?api_key=${GETBPM_KEY}&type=both&lookup=${query}`);
     const data = await res.json();
-    console.log(`Tracks fetch status: ${res.status}, items: ${data.items?.length || 0}`);
-    if (res.status !== 200 || !data.items) break;
-    for (const item of data.items) {
-      if (!item?.track) continue;
-      tracks.push({
-        id: item.track.id,
-        name: item.track.name,
-        artist: item.track.artists.map(a => a.name).join(', '),
-        preview_url: item.track.preview_url,
-      });
-    }
-    url = data.next;
-  }
-  return tracks;
+    if (!data.search?.length) return null;
+    const song = data.search[0];
+    return {
+      bpm: song.tempo ? parseInt(song.tempo) : null,
+      key: song.key_of ? song.key_of : null,
+    };
+  } catch { return null; }
 }
 
-// ─── ANÁLISIS DE AUDIO ────────────────────────────────────────────────────────
+// ─── ANÁLISIS DE AUDIO CON LIBROSA ───────────────────────────────────────────
 async function analyzeAudio(audioUrl, isFile = false) {
   const tmpMp3 = `/tmp/audio_${Date.now()}.mp3`;
   try {
@@ -144,10 +88,15 @@ except Exception as e:
 }
 
 async function analyzeViaYouTube(trackName, artist) {
-  const query = `${artist} ${trackName} audio`.replace(/"/g, '').replace(/'/g, '');
+  const query = `${artist} ${trackName} audio`.replace(/['"]/g, '');
   const tmpBase = `/tmp/yt_${Date.now()}`;
   try {
-    execSync(`yt-dlp --no-playlist -x --audio-format mp3 --audio-quality 5 --postprocessor-args "ffmpeg:-t 30" --output "${tmpBase}.%(ext)s" "ytsearch1:${query}" 2>/dev/null`, { timeout: 90000 });
+    execSync(
+      `yt-dlp --no-playlist -x --audio-format mp3 --audio-quality 5 ` +
+      `--postprocessor-args "ffmpeg:-t 30" ` +
+      `--output "${tmpBase}.%(ext)s" "ytsearch1:${query}" 2>/dev/null`,
+      { timeout: 90000 }
+    );
     const mp3File = `${tmpBase}.mp3`;
     if (!fs.existsSync(mp3File)) return null;
     const result = await analyzeAudio(mp3File, true);
@@ -200,29 +149,36 @@ function transitionNote(t1, t2) {
   return notes.join(' · ');
 }
 
-// ─── ANALIZAR PLAYLIST ────────────────────────────────────────────────────────
+// ─── ENDPOINT: ANALIZAR LISTA MANUAL ─────────────────────────────────────────
 app.post('/analyze', async (req, res) => {
   try {
-    const { playlist_id, access_token } = req.body;
-    if (!access_token) return res.status(401).json({ error: 'NO_TOKEN' });
-    if (!playlist_id) return res.status(400).json({ error: 'No playlist_id' });
-
-    const tracks = await getPlaylistTracks(playlist_id, access_token);
-    console.log(`Got ${tracks.length} tracks for playlist ${playlist_id}`);
-    if (!tracks.length) return res.status(400).json({ error: 'Playlist vacía o sin acceso' });
+    const { tracks: trackList } = req.body;
+    if (!trackList?.length) return res.status(400).json({ error: 'Lista de canciones vacía' });
 
     const analyzed = [];
-    for (const track of tracks) {
+    for (const track of trackList) {
+      const { name, artist } = track;
       let audioData = null;
-      if (track.preview_url) audioData = await analyzeAudio(track.preview_url);
-      if (!audioData) audioData = await analyzeViaYouTube(track.name, track.artist);
+
+      // Ruta 1: GetSongBPM (rápido, si hay API key)
+      const bpmData = await lookupSongBPM(name, artist);
+
+      // Ruta 2: YouTube + Librosa (análisis real)
+      audioData = await analyzeViaYouTube(name, artist);
+
+      // Combinar: si librosa funcionó usamos sus datos, si no usamos GetSongBPM
+      const finalBpm = audioData?.bpm || bpmData?.bpm || null;
+      const finalKey = audioData?.key || null;
+      const finalEnergy = audioData?.energy || null;
+
       analyzed.push({
-        ...track,
-        bpm: audioData?.bpm || null,
-        key: audioData?.key || null,
-        energy: audioData?.energy || null,
-        camelot: audioData?.key ? CAMELOT[audioData.key] : null,
-        source: audioData ? (track.preview_url ? 'spotify_preview' : 'youtube') : 'sin_datos',
+        name,
+        artist,
+        bpm: finalBpm,
+        key: finalKey,
+        energy: finalEnergy,
+        camelot: finalKey ? CAMELOT[finalKey] : null,
+        source: audioData ? 'youtube_librosa' : (bpmData ? 'getsongbpm' : 'sin_datos'),
       });
     }
 
