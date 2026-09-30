@@ -5,597 +5,277 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DJ Engine — Playlist Armónica</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    :root {
-      --bg: #0a0a0f;
-      --surface: #13131a;
-      --surface2: #1a1a24;
-      --accent: #7c3aed;
-      --accent2: #a855f7;
-      --text: #f0f0f5;
-      --muted: #6b6b8a;
-      --success: #10b981;
-      --warning: #f59e0b;
-      --error: #ef4444;
-      --border: #2a2a3a;
-    }
-
-    body {
-      font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      padding: 40px 20px;
-    }
-
-    .container { max-width: 860px; margin: 0 auto; }
-
-    /* HEADER */
-    .header { text-align: center; margin-bottom: 48px; }
-    .header h1 {
-      font-size: 2.8rem;
-      font-weight: 700;
-      background: linear-gradient(135deg, var(--accent2), #38bdf8);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      letter-spacing: -0.5px;
-    }
-    .header p { color: var(--muted); margin-top: 8px; font-size: 1rem; }
-
-    /* INPUT SECTION */
-    .input-section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
-      margin-bottom: 32px;
-    }
-
-    .input-label {
-      display: block;
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 12px;
-    }
-
-    .input-row { display: flex; gap: 12px; }
-
-    .url-input {
-      flex: 1;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 18px;
-      color: var(--text);
-      font-size: 0.95rem;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    .url-input:focus { border-color: var(--accent); }
-    .url-input::placeholder { color: var(--muted); }
-
-    .btn-analyze {
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      color: white;
-      border: none;
-      border-radius: 10px;
-      padding: 14px 28px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.2s, transform 0.1s;
-      white-space: nowrap;
-    }
-    .btn-analyze:hover { opacity: 0.9; transform: translateY(-1px); }
-    .btn-analyze:active { transform: translateY(0); }
-    .btn-analyze:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-
-    /* PROGRESS */
-    .progress-section {
-      display: none;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
-      margin-bottom: 32px;
-      text-align: center;
-    }
-    .progress-section.active { display: block; }
-
-    .progress-title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin-bottom: 8px;
-    }
-    .progress-subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 24px; }
-
-    .progress-bar-bg {
-      background: var(--surface2);
-      border-radius: 100px;
-      height: 6px;
-      overflow: hidden;
-    }
-    .progress-bar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
-      border-radius: 100px;
-      width: 0%;
-      transition: width 0.4s ease;
-      animation: shimmer 1.5s infinite;
-    }
-    @keyframes shimmer {
-      0% { opacity: 1; }
-      50% { opacity: 0.7; }
-      100% { opacity: 1; }
-    }
-
-    .progress-track {
-      color: var(--muted);
-      font-size: 0.85rem;
-      margin-top: 12px;
-    }
-
-    /* RESULTS */
-    .results-section { display: none; }
-    .results-section.active { display: block; }
-
-    .results-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-    }
-    .results-title {
-      font-size: 1.4rem;
-      font-weight: 700;
-    }
-    .results-count {
-      color: var(--muted);
-      font-size: 0.85rem;
-    }
-
-    .btn-export {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      color: var(--text);
-      border-radius: 8px;
-      padding: 8px 16px;
-      font-size: 0.85rem;
-      cursor: pointer;
-      transition: border-color 0.2s;
-    }
-    .btn-export:hover { border-color: var(--accent2); }
-
-    /* TRACK CARD */
-    .track-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 20px 24px;
-      margin-bottom: 4px;
-      display: grid;
-      grid-template-columns: 40px 1fr auto;
-      gap: 16px;
-      align-items: start;
-      transition: border-color 0.2s;
-    }
-    .track-card:hover { border-color: var(--accent); }
-
-    .track-position {
-      font-size: 1.3rem;
-      font-weight: 700;
-      color: var(--muted);
-      text-align: center;
-      padding-top: 2px;
-    }
-
-    .track-info {}
-    .track-name { font-weight: 600; font-size: 0.95rem; }
-    .track-artist { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
-    .track-transition {
-      font-size: 0.78rem;
-      color: var(--muted);
-      margin-top: 8px;
-      padding: 6px 10px;
-      background: var(--surface2);
-      border-radius: 6px;
-      border-left: 2px solid var(--accent);
-    }
-
-    .track-meta {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      align-items: flex-end;
-    }
-
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 10px;
-      border-radius: 100px;
-      font-size: 0.78rem;
-      font-weight: 600;
-    }
-    .badge-camelot {
-      background: rgba(124, 58, 237, 0.2);
-      color: var(--accent2);
-      border: 1px solid rgba(124, 58, 237, 0.3);
-    }
-    .badge-bpm {
-      background: rgba(56, 189, 248, 0.1);
-      color: #38bdf8;
-      border: 1px solid rgba(56, 189, 248, 0.2);
-    }
-    .badge-energy {
-      background: rgba(16, 185, 129, 0.1);
-      color: var(--success);
-      border: 1px solid rgba(16, 185, 129, 0.2);
-    }
-    .badge-source {
-      background: rgba(107, 107, 138, 0.1);
-      color: var(--muted);
-      border: 1px solid var(--border);
-    }
-    .badge-nodata {
-      background: rgba(239, 68, 68, 0.1);
-      color: var(--error);
-      border: 1px solid rgba(239, 68, 68, 0.2);
-    }
-
-    /* CONNECTOR LINE */
-    .connector {
-      display: flex;
-      align-items: center;
-      padding: 0 0 0 56px;
-      margin: 0;
-    }
-    .connector-line {
-      width: 2px;
-      height: 20px;
-      background: var(--border);
-      margin-left: 18px;
-    }
-
-    /* ERROR */
-    .error-box {
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.3);
-      border-radius: 12px;
-      padding: 20px 24px;
-      color: var(--error);
-      display: none;
-      margin-bottom: 24px;
-    }
-    .error-box.active { display: block; }
-
-    /* ENERGY BAR */
-    .energy-bar {
-      width: 60px;
-      height: 4px;
-      background: var(--surface2);
-      border-radius: 100px;
-      overflow: hidden;
-      margin-top: 4px;
-    }
-    .energy-fill {
-      height: 100%;
-      background: linear-gradient(90deg, var(--success), #f59e0b);
-      border-radius: 100px;
-    }
-
-    /* CONFIG URL */
-    .config-note {
-      color: var(--muted);
-      font-size: 0.8rem;
-      margin-top: 12px;
-      text-align: center;
-    }
-    .config-note span {
-      color: var(--accent2);
-      cursor: pointer;
-      text-decoration: underline;
-    }
-
-    /* BACKEND CONFIG MODAL */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.7);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-    }
-    .modal-overlay.active { display: flex; }
-    .modal {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 16px;
-      padding: 32px;
-      width: 90%;
-      max-width: 480px;
-    }
-    .modal h3 { font-size: 1.2rem; margin-bottom: 8px; }
-    .modal p { color: var(--muted); font-size: 0.85rem; margin-bottom: 20px; }
-    .modal-input {
-      width: 100%;
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px 14px;
-      color: var(--text);
-      font-size: 0.9rem;
-      outline: none;
-      margin-bottom: 12px;
-    }
-    .modal-input:focus { border-color: var(--accent); }
-    .btn-save {
-      width: 100%;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      color: white;
-      border: none;
-      border-radius: 8px;
-      padding: 12px;
-      font-size: 0.95rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#0a0a0f;--surface:#13131a;--surface2:#1a1a24;--accent:#7c3aed;--accent2:#a855f7;--text:#f0f0f5;--muted:#6b6b8a;--success:#10b981;--error:#ef4444;--border:#2a2a3a}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:40px 20px}
+    .container{max-width:860px;margin:0 auto}
+    .header{text-align:center;margin-bottom:48px}
+    .header h1{font-size:2.8rem;font-weight:700;background:linear-gradient(135deg,var(--accent2),#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+    .header p{color:var(--muted);margin-top:8px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;margin-bottom:24px}
+    .label{display:block;font-size:.85rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+    .input-row{display:flex;gap:12px}
+    .url-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;color:var(--text);font-size:.95rem;outline:none;transition:border-color .2s}
+    .url-input:focus{border-color:var(--accent)}
+    .url-input::placeholder{color:var(--muted)}
+    .btn{border:none;border-radius:10px;padding:14px 24px;font-size:.95rem;font-weight:600;cursor:pointer;transition:opacity .2s,transform .1s;white-space:nowrap}
+    .btn:hover{opacity:.9;transform:translateY(-1px)}
+    .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+    .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+    .btn-spotify{background:#1db954;color:#fff;display:flex;align-items:center;gap:8px;width:100%;justify-content:center;font-size:1rem;padding:16px}
+    .btn-secondary{background:var(--surface2);border:1px solid var(--border);color:var(--text)}
+    .login-section{text-align:center}
+    .login-section p{color:var(--muted);margin-bottom:20px;font-size:.95rem}
+    .token-status{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:8px;font-size:.85rem;margin-bottom:16px}
+    .token-ok{background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);color:var(--success)}
+    .token-none{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--error)}
+    .progress-section{display:none;text-align:center}
+    .progress-section.active{display:block}
+    .progress-title{font-size:1.1rem;font-weight:600;margin-bottom:8px}
+    .progress-sub{color:var(--muted);font-size:.9rem;margin-bottom:24px}
+    .progress-bg{background:var(--surface2);border-radius:100px;height:6px;overflow:hidden}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:100px;width:0%;transition:width .4s ease;animation:shimmer 1.5s infinite}
+    @keyframes shimmer{0%,100%{opacity:1}50%{opacity:.7}}
+    .results-section{display:none}
+    .results-section.active{display:block}
+    .results-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+    .results-title{font-size:1.4rem;font-weight:700}
+    .results-count{color:var(--muted);font-size:.85rem}
+    .track-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px 24px;margin-bottom:4px;display:grid;grid-template-columns:40px 1fr auto;gap:16px;align-items:start;transition:border-color .2s}
+    .track-card:hover{border-color:var(--accent)}
+    .track-pos{font-size:1.3rem;font-weight:700;color:var(--muted);text-align:center;padding-top:2px}
+    .track-name{font-weight:600;font-size:.95rem}
+    .track-artist{color:var(--muted);font-size:.85rem;margin-top:2px}
+    .track-transition{font-size:.78rem;color:var(--muted);margin-top:8px;padding:6px 10px;background:var(--surface2);border-radius:6px;border-left:2px solid var(--accent)}
+    .track-meta{display:flex;flex-direction:column;gap:6px;align-items:flex-end}
+    .badge{display:inline-flex;align-items:center;padding:4px 10px;border-radius:100px;font-size:.78rem;font-weight:600}
+    .b-camelot{background:rgba(124,58,237,.2);color:var(--accent2);border:1px solid rgba(124,58,237,.3)}
+    .b-bpm{background:rgba(56,189,248,.1);color:#38bdf8;border:1px solid rgba(56,189,248,.2)}
+    .b-energy{background:rgba(16,185,129,.1);color:var(--success);border:1px solid rgba(16,185,129,.2)}
+    .b-source{background:rgba(107,107,138,.1);color:var(--muted);border:1px solid var(--border)}
+    .connector{padding:0 0 0 56px}
+    .connector-line{width:2px;height:20px;background:var(--border);margin-left:18px}
+    .error-box{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:12px;padding:20px 24px;color:var(--error);display:none;margin-bottom:24px}
+    .error-box.active{display:block}
+    .energy-bar{width:60px;height:4px;background:var(--surface2);border-radius:100px;overflow:hidden;margin-top:4px}
+    .energy-fill{height:100%;background:linear-gradient(90deg,var(--success),#f59e0b);border-radius:100px}
+    .divider{border:none;border-top:1px solid var(--border);margin:20px 0}
   </style>
 </head>
 <body>
-
 <div class="container">
-
-  <!-- HEADER -->
   <div class="header">
     <h1>DJ Engine</h1>
-    <p>Análisis armónico real · Ordenamiento por Camelot + BPM + Energía</p>
+    <p>Análisis armónico real · Camelot + BPM + Energía</p>
   </div>
 
-  <!-- INPUT -->
-  <div class="input-section">
-    <label class="input-label">Link de tu playlist de Spotify</label>
-    <div class="input-row">
-      <input
-        type="text"
-        class="url-input"
-        id="playlistUrl"
-        placeholder="https://open.spotify.com/playlist/..."
-      />
-      <button class="btn-analyze" id="analyzeBtn" onclick="analyze()">
-        Analizar
+  <!-- LOGIN SECTION -->
+  <div class="card" id="loginCard">
+    <div id="tokenStatus"></div>
+    <div class="login-section" id="loginPrompt">
+      <p>Conecta tu cuenta de Spotify para analizar tus playlists</p>
+      <button class="btn btn-spotify" onclick="loginSpotify()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        Conectar con Spotify
       </button>
     </div>
-    <p class="config-note">
-      Backend: <span onclick="openConfig()" id="backendUrlDisplay">configurar URL del backend</span>
-    </p>
+    <div id="connectedSection" style="display:none">
+      <hr class="divider">
+      <label class="label">Link de tu playlist de Spotify</label>
+      <div class="input-row">
+        <input type="text" class="url-input" id="playlistUrl" placeholder="https://open.spotify.com/playlist/..."/>
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()">Analizar</button>
+      </div>
+      <p style="color:var(--muted);font-size:.8rem;margin-top:10px;text-align:right">
+        <span onclick="logout()" style="cursor:pointer;text-decoration:underline">Desconectar Spotify</span>
+      </p>
+    </div>
   </div>
 
-  <!-- ERROR -->
   <div class="error-box" id="errorBox"></div>
 
-  <!-- PROGRESS -->
   <div class="progress-section" id="progressSection">
-    <div class="progress-title" id="progressTitle">Obteniendo tracks...</div>
-    <div class="progress-subtitle" id="progressSubtitle">Conectando con Spotify</div>
-    <div class="progress-bar-bg">
-      <div class="progress-bar-fill" id="progressFill"></div>
-    </div>
-    <div class="progress-track" id="progressTrack"></div>
+    <div class="progress-title" id="progressTitle">Analizando...</div>
+    <div class="progress-sub" id="progressSub"></div>
+    <div class="progress-bg"><div class="progress-fill" id="progressFill"></div></div>
   </div>
 
-  <!-- RESULTS -->
   <div class="results-section" id="resultsSection">
     <div class="results-header">
       <div>
         <div class="results-title">Set ordenado</div>
         <div class="results-count" id="resultsCount"></div>
       </div>
-      <button class="btn-export" onclick="exportSet()">Exportar lista</button>
+      <button class="btn btn-secondary" onclick="exportSet()">Exportar lista</button>
     </div>
     <div id="trackList"></div>
-  </div>
-
-</div>
-
-<!-- MODAL CONFIG -->
-<div class="modal-overlay" id="configModal">
-  <div class="modal">
-    <h3>Configurar backend</h3>
-    <p>Pega la URL de tu servicio en Render. Termina sin barra diagonal.</p>
-    <input
-      class="modal-input"
-      id="backendUrlInput"
-      placeholder="https://dj-engine-backend.onrender.com"
-    />
-    <button class="btn-save" onclick="saveConfig()">Guardar</button>
   </div>
 </div>
 
 <script>
-  let BACKEND_URL = localStorage.getItem('dj_backend_url') || '';
-  let lastSet = [];
+const BACKEND = 'https://dj-engine.onrender.com';
+let lastSet = [];
 
-  // Mostrar URL guardada
-  if (BACKEND_URL) {
-    document.getElementById('backendUrlDisplay').textContent = BACKEND_URL;
+// Leer token de URL (viene del callback de Spotify)
+function init() {
+  const params = new URLSearchParams(window.location.search);
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+
+  if (accessToken) {
+    localStorage.setItem('spotify_access_token', accessToken);
+    if (refreshToken) localStorage.setItem('spotify_refresh_token', refreshToken);
+    window.history.replaceState({}, '', window.location.pathname);
   }
 
-  function openConfig() {
-    document.getElementById('backendUrlInput').value = BACKEND_URL;
-    document.getElementById('configModal').classList.add('active');
+  updateTokenStatus();
+}
+
+function updateTokenStatus() {
+  const token = localStorage.getItem('spotify_access_token');
+  const statusEl = document.getElementById('tokenStatus');
+  const loginPrompt = document.getElementById('loginPrompt');
+  const connectedSection = document.getElementById('connectedSection');
+
+  if (token) {
+    statusEl.innerHTML = `<div class="token-status token-ok">✓ Spotify conectado</div>`;
+    loginPrompt.style.display = 'none';
+    connectedSection.style.display = 'block';
+  } else {
+    statusEl.innerHTML = '';
+    loginPrompt.style.display = 'block';
+    connectedSection.style.display = 'none';
   }
+}
 
-  function saveConfig() {
-    const url = document.getElementById('backendUrlInput').value.trim().replace(/\/$/, '');
-    if (!url) return;
-    BACKEND_URL = url;
-    localStorage.setItem('dj_backend_url', url);
-    document.getElementById('backendUrlDisplay').textContent = url;
-    document.getElementById('configModal').classList.remove('active');
-  }
+function loginSpotify() {
+  window.location.href = `${BACKEND}/login`;
+}
 
-  // Cerrar modal al click fuera
-  document.getElementById('configModal').addEventListener('click', function(e) {
-    if (e.target === this) this.classList.remove('active');
-  });
+function logout() {
+  localStorage.removeItem('spotify_access_token');
+  localStorage.removeItem('spotify_refresh_token');
+  updateTokenStatus();
+}
 
-  function setProgress(title, subtitle, percent, trackText) {
-    document.getElementById('progressTitle').textContent = title;
-    document.getElementById('progressSubtitle').textContent = subtitle;
-    document.getElementById('progressFill').style.width = percent + '%';
-    document.getElementById('progressTrack').textContent = trackText || '';
-  }
+function showError(msg) {
+  const box = document.getElementById('errorBox');
+  box.textContent = msg;
+  box.classList.add('active');
+}
 
-  function showError(msg) {
-    const box = document.getElementById('errorBox');
-    box.textContent = msg;
-    box.classList.add('active');
-  }
+function hideError() {
+  document.getElementById('errorBox').classList.remove('active');
+}
 
-  function hideError() {
-    document.getElementById('errorBox').classList.remove('active');
-  }
+async function analyze() {
+  const url = document.getElementById('playlistUrl').value.trim();
+  const token = localStorage.getItem('spotify_access_token');
+  if (!url) return showError('Pega el link de tu playlist.');
+  if (!token) return showError('Conecta tu Spotify primero.');
 
-  async function analyze() {
-    const url = document.getElementById('playlistUrl').value.trim();
-    if (!url) return showError('Pega el link de tu playlist de Spotify.');
-    if (!BACKEND_URL) return showError('Configura la URL del backend primero (enlace de abajo).');
+  hideError();
+  document.getElementById('resultsSection').classList.remove('active');
+  document.getElementById('progressSection').classList.add('active');
+  document.getElementById('analyzeBtn').disabled = true;
 
-    hideError();
-    document.getElementById('resultsSection').classList.remove('active');
-    document.getElementById('progressSection').classList.add('active');
-    document.getElementById('analyzeBtn').disabled = true;
+  const prog = (t, s, p) => {
+    document.getElementById('progressTitle').textContent = t;
+    document.getElementById('progressSub').textContent = s;
+    document.getElementById('progressFill').style.width = p + '%';
+  };
 
-    setProgress('Conectando con Spotify...', 'Autenticando y obteniendo tracklist', 10);
+  prog('Obteniendo tracks...', 'Conectando con Spotify', 10);
 
-    try {
-      const res = await fetch(`${BACKEND_URL}/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playlist_url: url }),
-      });
-
-      // Simular progreso mientras espera
-      let progress = 10;
-      const interval = setInterval(() => {
-        if (progress < 85) {
-          progress += Math.random() * 8;
-          const track = Math.floor((progress - 10) / 75 * 20);
-          setProgress(
-            'Analizando audio...',
-            'Extrayendo BPM, tonalidad y energía de cada track',
-            Math.min(progress, 85),
-            `Procesando track ${track}...`
-          );
-        }
-      }, 1200);
-
-      const data = await res.json();
-      clearInterval(interval);
-
-      if (!res.ok) throw new Error(data.error || 'Error en el servidor');
-
-      setProgress('Ordenando set...', 'Aplicando algoritmo Camelot + BPM + Energía', 95);
-      await new Promise(r => setTimeout(r, 600));
-      setProgress('Listo', '', 100);
-      await new Promise(r => setTimeout(r, 400));
-
-      lastSet = data.set;
-      renderResults(data);
-
-    } catch (err) {
-      showError('Error: ' + err.message);
-      document.getElementById('progressSection').classList.remove('active');
+  let progress = 10;
+  const interval = setInterval(() => {
+    if (progress < 85) {
+      progress += Math.random() * 6;
+      prog('Analizando audio...', 'Extrayendo BPM, tonalidad y energía', Math.min(progress, 85));
     }
+  }, 1500);
 
-    document.getElementById('analyzeBtn').disabled = false;
-    document.getElementById('progressSection').classList.remove('active');
-  }
-
-  function renderResults(data) {
-    const section = document.getElementById('resultsSection');
-    const list = document.getElementById('trackList');
-    const count = document.getElementById('resultsCount');
-
-    count.textContent = `${data.total} tracks · ordenados por compatibilidad armónica`;
-    list.innerHTML = '';
-
-    data.set.forEach((track, i) => {
-      // Connector line entre tracks
-      if (i > 0) {
-        const connector = document.createElement('div');
-        connector.className = 'connector';
-        connector.innerHTML = '<div class="connector-line"></div>';
-        list.appendChild(connector);
-      }
-
-      const card = document.createElement('div');
-      card.className = 'track-card';
-
-      // Source badge
-      let sourceBadge = '';
-      if (track.source === 'spotify_preview') {
-        sourceBadge = `<span class="badge badge-source">Spotify 30s</span>`;
-      } else if (track.source === 'youtube') {
-        sourceBadge = `<span class="badge badge-source">YouTube</span>`;
-      } else {
-        sourceBadge = `<span class="badge badge-nodata">Sin datos</span>`;
-      }
-
-      // Energy bar
-      const energyPct = track.energy ? Math.round(track.energy * 100) : 0;
-
-      card.innerHTML = `
-        <div class="track-position">${track.position}</div>
-        <div class="track-info">
-          <div class="track-name">${track.name}</div>
-          <div class="track-artist">${track.artist}</div>
-          ${track.transition_note !== 'Opening track'
-            ? `<div class="track-transition">↑ ${track.transition_note}</div>`
-            : `<div class="track-transition">⟶ Opening track</div>`
-          }
-        </div>
-        <div class="track-meta">
-          ${track.camelot ? `<span class="badge badge-camelot">${track.camelot}</span>` : ''}
-          ${track.bpm ? `<span class="badge badge-bpm">${track.bpm} BPM</span>` : ''}
-          ${track.energy !== null ? `
-            <div style="text-align:right">
-              <span class="badge badge-energy">${energyPct}%</span>
-              <div class="energy-bar" style="margin-top:4px">
-                <div class="energy-fill" style="width:${energyPct}%"></div>
-              </div>
-            </div>
-          ` : ''}
-          ${sourceBadge}
-        </div>
-      `;
-
-      list.appendChild(card);
+  try {
+    const res = await fetch(`${BACKEND}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playlist_url: url, access_token: token }),
     });
 
-    section.classList.add('active');
-    section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    clearInterval(interval);
+    const data = await res.json();
+
+    if (res.status === 401 && data.error === 'NO_TOKEN') {
+      loginSpotify();
+      return;
+    }
+
+    if (!res.ok) throw new Error(data.error || 'Error en el servidor');
+
+    prog('Ordenando set...', '', 95);
+    await new Promise(r => setTimeout(r, 500));
+    prog('Listo', '', 100);
+    await new Promise(r => setTimeout(r, 300));
+
+    lastSet = data.set;
+    renderResults(data);
+
+  } catch (err) {
+    clearInterval(interval);
+    showError('Error: ' + err.message);
   }
 
-  function exportSet() {
-    if (!lastSet.length) return;
-    const lines = lastSet.map(t =>
-      `${t.position}. ${t.artist} — ${t.name} | ${t.camelot || '?'} | ${t.bpm || '?'} BPM | Energía ${t.energy !== null ? Math.round(t.energy * 100) + '%' : '?'}`
-    );
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'dj_set.txt';
-    a.click();
-  }
+  document.getElementById('analyzeBtn').disabled = false;
+  document.getElementById('progressSection').classList.remove('active');
+}
+
+function renderResults(data) {
+  const list = document.getElementById('trackList');
+  document.getElementById('resultsCount').textContent = `${data.total} tracks · ordenados por compatibilidad armónica`;
+  list.innerHTML = '';
+
+  data.set.forEach((track, i) => {
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'connector';
+      conn.innerHTML = '<div class="connector-line"></div>';
+      list.appendChild(conn);
+    }
+
+    const energyPct = track.energy ? Math.round(track.energy * 100) : 0;
+    const card = document.createElement('div');
+    card.className = 'track-card';
+    card.innerHTML = `
+      <div class="track-pos">${track.position}</div>
+      <div>
+        <div class="track-name">${track.name}</div>
+        <div class="track-artist">${track.artist}</div>
+        <div class="track-transition">${track.transition_note === 'Opening track' ? '⟶ Opening track' : '↑ ' + track.transition_note}</div>
+      </div>
+      <div class="track-meta">
+        ${track.camelot ? `<span class="badge b-camelot">${track.camelot}</span>` : ''}
+        ${track.bpm ? `<span class="badge b-bpm">${track.bpm} BPM</span>` : ''}
+        ${track.energy !== null ? `<span class="badge b-energy">${energyPct}%</span><div class="energy-bar"><div class="energy-fill" style="width:${energyPct}%"></div></div>` : ''}
+        <span class="badge b-source">${track.source === 'spotify_preview' ? 'Spotify 30s' : track.source === 'youtube' ? 'YouTube' : 'Sin datos'}</span>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+
+  document.getElementById('resultsSection').classList.add('active');
+  document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+}
+
+function exportSet() {
+  if (!lastSet.length) return;
+  const lines = lastSet.map(t => `${t.position}. ${t.artist} — ${t.name} | ${t.camelot || '?'} | ${t.bpm || '?'} BPM | ${t.energy !== null ? Math.round(t.energy*100)+'%' : '?'}`);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/plain' }));
+  a.download = 'dj_set.txt';
+  a.click();
+}
+
+init();
 </script>
-
 </body>
 </html>
